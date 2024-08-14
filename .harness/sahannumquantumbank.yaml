@@ -3,7 +3,7 @@ pipeline:
   identifier: sahannumquantumbank
   projectIdentifier: devX_super_team
   orgIdentifier: SE_Sandbox
-  description: Steve H's crack at Hassan's Quantum Lab Stage 1
+  description: Trying to fix the supremely busted pipeline
   tags: {}
   properties:
     ci:
@@ -161,22 +161,28 @@ pipeline:
           service:
             serviceRef: stevehquantumbankbackend
           environment:
-            environmentRef: sahannumdevenv
-            gitBranch: main
+            environmentRef: sahannumdevenv2
             deployToAll: false
             infrastructureDefinitions:
-              - identifier: stevehquantuminfra
+              - identifier: sahannuminfra2
           execution:
             steps:
               - step:
+                  name: Rollout Deployment
+                  identifier: rolloutDeployment
                   type: K8sRollingDeploy
-                  name: K8sRollingDeploy_1
-                  identifier: K8sRollingDeploy_1
+                  timeout: 10m
                   spec:
                     skipDryRun: false
                     pruningEnabled: false
+            rollbackSteps:
+              - step:
+                  name: Rollback Rollout Deployment
+                  identifier: rollbackRolloutDeployment
+                  type: K8sRollingRollback
                   timeout: 10m
-            rollbackSteps: []
+                  spec:
+                    pruningEnabled: false
         tags: {}
         failureStrategies:
           - onFailure:
