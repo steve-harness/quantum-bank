@@ -1,0 +1,186 @@
+pipeline:
+  name: sahannum-quantum-bank
+  identifier: sahannumquantumbank
+  projectIdentifier: devX_super_team
+  orgIdentifier: SE_Sandbox
+  description: Steve H's crack at Hassan's Quantum Lab Stage 1
+  tags: {}
+  properties:
+    ci:
+      codebase:
+        connectorRef: steveharnessgithub
+        repoName: quantum-bank
+        build: <+input>
+  stages:
+    - stage:
+        name: build
+        identifier: build
+        description: ""
+        type: CI
+        spec:
+          cloneCodebase: true
+          caching:
+            enabled: true
+            paths: []
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          execution:
+            steps:
+              - parallel:
+                  - step:
+                      type: Bandit
+                      name: Bandit_1
+                      identifier: Bandit_1
+                      spec:
+                        mode: orchestration
+                        config: default
+                        target:
+                          type: repository
+                          detection: auto
+                        advanced:
+                          log:
+                            level: info
+                          fail_on_severity: high
+                  - step:
+                      type: Gitleaks
+                      name: Gitleaks_1
+                      identifier: Gitleaks_1
+                      spec:
+                        mode: orchestration
+                        config: default
+                        target:
+                          type: repository
+                          detection: auto
+                        advanced:
+                          log:
+                            level: info
+              - step:
+                  type: BuildAndPushDockerRegistry
+                  name: BuildAndPushDockerRegistry_1
+                  identifier: BuildAndPushDockerRegistry_1
+                  spec:
+                    connectorRef: sahannumdocker_connector
+                    repo: sahannumharness/quantum-bank-backend
+                    tags:
+                      - latest
+                    caching: false
+                    dockerfile: ./Dockerfile
+              - parallel:
+                  - step:
+                      type: Snyk
+                      name: Snyk_1 - SAST
+                      identifier: Snyk_1_SAST
+                      spec:
+                        mode: orchestration
+                        config: default
+                        target:
+                          type: container
+                          detection: auto
+                        advanced:
+                          log:
+                            level: info
+                        image:
+                          type: local_image
+                          name: sahannumharness/quantum-bank-backend
+                          tag: latest
+                        auth:
+                          access_token: <+secrets.getValue("jc-snyk-token")>
+                        sbom:
+                          format: spdx-json
+                      description: static code analysis; see https://developer.harness.io/docs/security-testing-orchestration/sto-techref-category/snyk/snyk-scans/
+                  - step:
+                      type: RunTests
+                      name: RunTests_1
+                      identifier: RunTests_1
+                      spec:
+                        connectorRef: sahannumdocker_connector
+                        image: sahannumharness/quantum-bank-backend
+                        language: Python
+                        buildTool: Pytest
+                        args: ./test/*.py --junitxml=out_report.xml
+                        runOnlySelectedTests: true
+                        preCommand: python3 app.py &
+                        enableTestSplitting: false
+                  - step:
+                      type: AquaTrivy
+                      name: AquaTrivy_1
+                      identifier: AquaTrivy_1
+                      spec:
+                        mode: orchestration
+                        config: default
+                        target:
+                          type: container
+                          detection: auto
+                        advanced:
+                          log:
+                            level: info
+                        privileged: true
+                        image:
+                          type: docker_v2
+                          name: sahannumharness/quantum-bank-backend
+                          tag: latest
+                        sbom:
+                          format: spdx-json
+    - stage:
+        name: manual approval gate
+        identifier: approval_gate
+        description: ""
+        type: Approval
+        spec:
+          execution:
+            steps:
+              - step:
+                  name: approval
+                  identifier: approval
+                  type: HarnessApproval
+                  timeout: 1d
+                  spec:
+                    approvalMessage: |-
+                      Please review the following information
+                      and approve the pipeline progression
+                    includePipelineExecutionHistory: true
+                    approvers:
+                      minimumCount: 1
+                      disallowPipelineExecutor: false
+                      userGroups:
+                        - account._account_all_users
+                    isAutoRejectEnabled: false
+                    approverInputs: []
+        tags: {}
+    - stage:
+        name: deploy
+        identifier: deploy
+        description: ""
+        type: Deployment
+        spec:
+          deploymentType: Kubernetes
+          service:
+            serviceRef: stevehquantumbankbackend
+          environment:
+            environmentRef: sahannumdevenv
+            gitBranch: main
+            deployToAll: false
+            infrastructureDefinitions:
+              - identifier: stevehquantuminfra
+          execution:
+            steps:
+              - step:
+                  type: K8sRollingDeploy
+                  name: K8sRollingDeploy_1
+                  identifier: K8sRollingDeploy_1
+                  spec:
+                    skipDryRun: false
+                    pruningEnabled: false
+                  timeout: 10m
+            rollbackSteps: []
+        tags: {}
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback
